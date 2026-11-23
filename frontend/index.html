@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CallGuard MVP</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --idle: #64748b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 32px 120px 48px 20px; /* right padding keeps content clear of the side-bar */
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 760px; margin: 0 auto; }
+
+    h1 { margin: 0 0 4px; font-size: 1.6rem; }
+    .subtitle { margin: 0 0 20px; color: var(--muted); font-size: 0.95rem; }
+
+    .privacy-note {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      color: #bbf7d0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      resize: vertical;
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font: inherit;
+    }
+    textarea:focus { outline: 2px solid #3b82f6; outline-offset: 1px; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 9px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      color: #fff;
+      transition: opacity 0.15s ease, transform 0.05s ease;
+    }
+    button:hover { opacity: 0.9; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #analyzeBtn { background: #3b82f6; }
+    #scamBtn    { background: #dc2626; }
+    #normalBtn  { background: #16a34a; }
+
+    #warningBox {
+      display: none;
+      margin-top: 18px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid #ef4444;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    #warningBox.visible { display: block; }
+    #warningBox .warning-title { font-weight: 700; color: #fca5a5; margin-bottom: 6px; }
+    #warningBox .warning-text { margin: 0 0 8px; }
+    #warningBox .warning-phrases { margin: 0 0 12px; color: var(--muted); font-size: 0.9rem; }
+    #verifyBtn { background: #ef4444; }
+
+    h2 { font-size: 1.05rem; margin: 24px 0 10px; }
+
+    #logBox {
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      height: 240px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+    .log-entry { padding: 6px 0; border-bottom: 1px dashed #1f2a3d; word-break: break-word; }
+    .log-entry:last-child { border-bottom: 0; }
+    .log-time { color: var(--muted); margin-right: 6px; }
+    .log-error { color: #fca5a5; }
+    .log-info { color: #cbd5e1; }
+
+    .disclaimer {
+      margin-top: 28px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    /* ---------- Floating risk side-bar ---------- */
+    #riskSidebar {
+      --accent: var(--idle);
+      position: fixed;
+      right: 14px;
+      top: 120px;
+      width: 86px;
+      z-index: 9999;
+      background: rgba(15, 23, 42, 0.96);
+      border: 2px solid var(--accent);
+      border-radius: 14px;
+      padding: 10px 8px 12px;
+      text-align: center;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      transition: border-color 0.3s ease;
+    }
+    #riskSidebar.dragging { cursor: grabbing; }
+
+    .sb-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .sb-score {
+      font-size: 1.9rem;
+      font-weight: 800;
+      line-height: 1.15;
+      margin: 4px 0 8px;
+      color: var(--accent);
+    }
+    .sb-bar {
+      position: relative;
+      width: 26px;
+      height: 110px;
+      margin: 0 auto 8px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .sb-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 0%;
+      background: var(--accent);
+      transition: height 0.5s ease, background 0.3s ease;
+    }
+    .sb-status {
+      font-size: 0.85rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+
+    #riskSidebar.pulse { animation: sidebarPulse 1.1s ease-in-out infinite; }
+    @keyframes sidebarPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70%  { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 20px 104px 40px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CallGuard MVP</h1>
+    <p class="subtitle">Privacy-first call &amp; audio scam risk monitor</p>
+
+    <div class="privacy-note">
+      <strong>Privacy note:</strong> No raw audio or call recordings are stored by default.
+      Text you enter is sent only to your local backend for scoring and is not saved.
+    </div>
+
+    <div class="card">
+      <label for="transcriptInput">Call transcript or suspicious speech text</label>
+      <textarea id="transcriptInput" placeholder="Paste or type what the caller said..."></textarea>
+
+      <div class="actions">
+        <button id="analyzeBtn" type="button">Analyze via Backend</button>
+        <button id="scamBtn" type="button">Test Scam Phrase</button>
+        <button id="normalBtn" type="button">Test Normal Phrase</button>
+      </div>
+
+      <div id="warningBox" role="alert">
+        <div class="warning-title">&#9888; High risk call signal</div>
+        <p class="warning-text" id="warningText"></p>
+        <p class="warning-phrases">Detected signals: <span id="warningPhrases"></span></p>
+        <button id="verifyBtn" type="button">Verify with Family</button>
+      </div>
+    </div>
+
+    <h2>Event Log</h2>
+    <div id="logBox" aria-live="polite"></div>
+
+    <p class="disclaimer">Decision-support score only; not a 100% guarantee.</p>
+  </div>
+
+  <!-- Floating risk meter -->
+  <div id="riskSidebar" title="Drag up or down to move">
+    <div class="sb-label">RISK SCORE</div>
+    <div class="sb-score" id="sbScore">0</div>
+    <div class="sb-bar"><div class="sb-fill" id="sbFill"></div></div>
+    <div class="sb-status" id="sbStatus">&mdash;</div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var API_URL = "http://127.0.0.1:8000/analyze-signal";
+      var SCAM_TEXT = "Mummy urgent paise bhejo, accident ho gaya hai aur jaldi UPI transfer karo";
+      var NORMAL_TEXT = "Hi, main evening mein 6 baje tak ghar aa jaunga, dinner ready rakhna.";
+
+      var transcriptInput = document.getElementById("transcriptInput");
+      var analyzeBtn = document.getElementById("analyzeBtn");
+      var scamBtn = document.getElementById("scamBtn");
+      var normalBtn = document.getElementById("normalBtn");
+      var verifyBtn = document.getElementById("verifyBtn");
+      var warningBox = document.getElementById("warningBox");
+      var warningText = document.getElementById("warningText");
+      var warningPhrases = document.getElementById("warningPhrases");
+      var logBox = document.getElementById("logBox");
+      var sidebar = document.getElementById("riskSidebar");
+      var sbScore = document.getElementById("sbScore");
+      var sbFill = document.getElementById("sbFill");
+      var sbStatus = document.getElementById("sbStatus");
+
+      var busy = false;
+
+      /* ---------- Logging (newest first) ---------- */
+      function log(message, kind) {
+        var entry = document.createElement("div");
+        entry.className = "log-entry " + (kind === "error" ? "log-error" : "log-info");
+
+        var time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = "[" + new Date().toLocaleTimeString() + "]";
+
+        var body = document.createElement("span");
+        body.textContent = message;
+
+        entry.appendChild(time);
+        entry.appendChild(body);
+        logBox.insertBefore(entry, logBox.firstChild);
+      }
+
+      /* ---------- Risk level resolution ---------- */
+      function resolveLevel(data) {
+        var score = Number(data.risk_score);
+        var level = data.risk_level;
+        if (level === "HIGH" || score >= 66) return "HIGH";
+        if (level === "MEDIUM" || (score >= 36 && score <= 65)) return "MEDIUM";
+        return "LOW";
+      }
+
+      /* ---------- Side-bar rendering ---------- */
+      function renderRisk(data) {
+        var score = Math.max(0, Math.min(100, Math.round(Number(data.risk_score) || 0)));
+        var level = resolveLevel(data);
+
+        var accent, statusLabel;
+        if (level === "HIGH") { accent = "#ef4444"; statusLabel = "HIGH"; }
+        else if (level === "MEDIUM") { accent = "#f59e0b"; statusLabel = "MED"; }
+        else { accent = "#22c55e"; statusLabel = "LOW"; }
+
+        sidebar.style.setProperty("--accent", accent);
+        sbScore.textContent = String(score);
+        sbFill.style.height = score + "%";
+        sbStatus.textContent = statusLabel;
+
+        if (level === "HIGH") {
+          sidebar.classList.add("pulse");
+          warningText.textContent = data.warning || "";
+          warningPhrases.textContent = (data.matched_phrases || []).join(", ") || "voice signal";
+          warningBox.classList.add("visible");
+        } else {
+          sidebar.classList.remove("pulse");
+          warningBox.classList.remove("visible");
+        }
+
+        return { score: score, level: level };
+      }
+
+      /* ---------- Backend call ---------- */
+      function setBusy(value) {
+        busy = value;
+        analyzeBtn.disabled = value;
+        scamBtn.disabled = value;
+        normalBtn.disabled = value;
+      }
+
+      async function analyze(text, anomalyScore) {
+        if (busy) return;
+        setBusy(true);
+        try {
+          var response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: text, voice_anomaly_score: anomalyScore })
+          });
+
+          if (!response.ok) {
+            throw new Error("Backend responded with HTTP " + response.status);
+          }
+
+          var data = await response.json();
+          var result = renderRisk(data);
+          var phrases = (data.matched_phrases || []).join(", ") || "none";
+          log(
+            "Score: " + result.score + " | Level: " + result.level +
+            " | Matched phrases: " + phrases,
+            "info"
+          );
+        } catch (err) {
+          log(
+            "Could not reach the backend (" + (err && err.message ? err.message : "unknown error") +
+            "). Please verify that `uvicorn main:app --reload --port 8000` is running on port 8000 " +
+            "inside the backend/ folder.",
+            "error"
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      /* ---------- Button handlers ---------- */
+      analyzeBtn.addEventListener("click", function () {
+        var text = transcriptInput.value.trim();
+        if (!text) {
+          log("Nothing to analyze: please enter a transcript or suspicious phrase first.", "error");
+          return;
+        }
+        analyze(text, 15);
+      });
+
+      scamBtn.addEventListener("click", function () {
+        transcriptInput.value = SCAM_TEXT;
+        analyze(SCAM_TEXT, 28);
+      });
+
+      normalBtn.addEventListener("click", function () {
+        transcriptInput.value = NORMAL_TEXT;
+        analyze(NORMAL_TEXT, 10);
+      });
+
+      verifyBtn.addEventListener("click", function () {
+        log("Family verification alert triggered: please call a trusted family member on a known number before taking any action.", "info");
+      });
+
+      /* ---------- Vertical drag for the side-bar ---------- */
+      var MIN_TOP = 20;
+      function maxTop() {
+        return Math.max(MIN_TOP, window.innerHeight - 240);
+      }
+      function clampTop(value) {
+        return Math.min(maxTop(), Math.max(MIN_TOP, value));
+      }
+
+      var dragging = false;
+      var dragOffsetY = 0;
+
+      sidebar.addEventListener("mousedown", function (e) {
+        dragging = true;
+        dragOffsetY = e.clientY - sidebar.getBoundingClientRect().top;
+        sidebar.classList.add("dragging");
+        e.preventDefault();
+      });
+
+      document.addEventListener("mousemove", function (e) {
+        if (!dragging) return;
+        sidebar.style.top = clampTop(e.clientY - dragOffsetY) + "px";
+      });
+
+      document.addEventListener("mouseup", function () {
+        if (!dragging) return;
+        dragging = false;
+        sidebar.classList.remove("dragging");
+      });
+
+      window.addEventListener("resize", function () {
+        var current = parseFloat(sidebar.style.top) || sidebar.getBoundingClientRect().top;
+        sidebar.style.top = clampTop(current) + "px";
+      });
+
+      log("CallGuard ready. Enter a transcript or use a test phrase.", "info");
+    })();
+  </script>
+</body>
+</html>
